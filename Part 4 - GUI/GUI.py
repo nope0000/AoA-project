@@ -1,18 +1,37 @@
 import tkinter as tk
-from tkinter import simpledialog, messagebox
+from tkinter import ttk
 import matplotlib.pyplot as plt
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import networkx as nx
-import random
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
+import pandas as pd
 
-
-class GraphApp:
+class GraphVisualizer:
     def __init__(self, master):
         self.master = master
-        self.master.title("Prim & Kruskal Visualization")
+        self.master.title("FINDING MST WITH PRIM AND KRUSKAL")
+
+        # Create a frame for buttons
+        button_frame = tk.Frame(self.master)
+        button_frame.pack(side=tk.TOP, fill=tk.X)
+
+        # Create buttons for different input types
+        self.adj_matrix_button = ttk.Button(button_frame, text="Input Adjacency Matrix", command=self.input_adj_matrix)
+        self.adj_matrix_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.adj_list_button = ttk.Button(button_frame, text="Input Adjacency List", command=self.input_adj_list)
+        self.adj_list_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.prim_button = ttk.Button(button_frame, text="Prim", command=self.find_prim)
+        self.prim_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.kruskal_button = ttk.Button(button_frame, text="Kruskal", command=self.find_kruskal)
+        self.kruskal_button.pack(side=tk.LEFT, padx=5, pady=5)
+
+        self.org_graph_button = ttk.Button(button_frame, text="Original", command=self.org_graph)
+        self.org_graph_button.pack(side=tk.LEFT, padx=5, pady=5)
 
         self.graph = nx.Graph()
-        self.pos = {}  # For storing node positions
 
         self.frame = tk.Frame(master)
         self.frame.pack(fill=tk.BOTH, expand=True)
@@ -21,109 +40,112 @@ class GraphApp:
         self.canvas.pack(fill=tk.BOTH, expand=True)
 
         self.fig, self.ax = plt.subplots(figsize=(8, 6))
+        self.ax.axis('off')
         self.canvas_widget = FigureCanvasTkAgg(self.fig, self.canvas)
         self.canvas_widget.get_tk_widget().pack(fill=tk.BOTH, expand=True)
 
-        self.mode = tk.StringVar(value="draw")
-        tk.Label(master, text="Select Mode:").pack(side=tk.LEFT)
-        tk.OptionMenu(master, self.mode, "draw", "adjacency_matrix", "adjacency_list").pack(side=tk.LEFT)
 
-        self.add_node_button = tk.Button(self.master, text="Add Node", command=self.add_node)
-        self.add_node_button.pack(side=tk.LEFT)
+    def clear_graph(self):
+        """Clear the graph and the figure for a new query."""
+        self.graph.clear()  # Clear the graph data
+        self.ax.clear()  # Clear the figure
+        self.ax.axis('off')  # Turn off the axis
+        self.canvas_widget.draw()  # Update the canvas
 
-        self.add_edge_button = tk.Button(self.master, text="Add Edge", command=self.add_edge)
-        self.add_edge_button.pack(side=tk.LEFT)
+    def input_adj_matrix(self):
+        self.clear_graph()  # Clear the graph data
 
-        self.prim_button = tk.Button(self.master, text="Show Prim's MST", command=self.show_prim_mst)
-        self.prim_button.pack(side=tk.RIGHT)
+        # Ask for the number of nodes
+        num_nodes = tk.simpledialog.askinteger("Input", "Enter number of nodes:")
 
-        self.kruskal_button = tk.Button(self.master, text="Show Kruskal's MST", command=self.show_kruskal_mst)
-        self.kruskal_button.pack(side=tk.RIGHT)
+        if num_nodes:
+            adj_matrix = []
 
-        self.draw_graph()
+            # Prompt the user for each row of the adjacency matrix
+            for i in range(num_nodes):
+                row_str = tk.simpledialog.askstring("Input", f"Enter adjacency row for node {i + 1} (space-separated):")
+                row = list(map(int, row_str.split()))
+                adj_matrix.append(row)
 
-    def add_node(self):
-        if self.mode.get() == "draw":
-            self.add_node_draw_mode()
-        elif self.mode.get() == "adjacency_matrix":
-            self.add_node_matrix_mode()
-        elif self.mode.get() == "adjacency_list":
-            self.add_node_list_mode()
+            adj_matrix = np.array(adj_matrix)
 
-    def add_node_draw_mode(self):
-        label = simpledialog.askstring("Node Label", "Enter node label:", parent=self.master)
-        if label:
-            self.graph.add_node(label)
-            self.pos[label] = (random.uniform(0.1, 0.9), random.uniform(0.1, 0.9))
+            # Create the graph from adjacency matrix
+            self.create_graph_from_adj_matrix(adj_matrix)
             self.draw_graph()
 
-    def add_node_matrix_mode(self):
-        num_nodes = simpledialog.askinteger("Input", "Enter number of nodes:", parent=self.master)
-        self.graph.clear()
-        self.pos.clear()
+    def input_adj_list(self):
+        self.clear_graph()  # Clear the graph data
 
-        matrix = []
-        for i in range(num_nodes):
-            row = simpledialog.askstring("Input", f"Enter row {i + 1} of adjacency matrix (comma-separated):",
-                                         parent=self.master)
-            matrix.append(list(map(int, row.split(','))))
+        # Ask for the number of nodes
+        num_nodes = tk.simpledialog.askinteger("Input", "Enter number of nodes:")
 
-        for i in range(num_nodes):
-            for j in range(i + 1, num_nodes):
-                if matrix[i][j] > 0:
-                    self.graph.add_edge(i, j, weight=matrix[i][j])
+        if num_nodes:
+            # Create an empty adjacency matrix (DataFrame)
+            adj_df = pd.DataFrame(0, index=range(1, num_nodes + 1), columns=range(1, num_nodes + 1))
 
-        self.pos = nx.spring_layout(self.graph)  # Recompute positions
-        self.draw_graph()
+            # Prompt the user for each node's adjacency list
+            for i in range(num_nodes):
+                neighbors_str = tk.simpledialog.askstring("Input", f"Enter neighbors and weights for node {i + 1} (format: neighbor,weight neighbor,weight ...):")
+                if neighbors_str:
+                    neighbors = neighbors_str.split()
+                    for neighbor_str in neighbors:
+                        neighbor, weight = neighbor_str.split(',')
+                        neighbor = int(neighbor)
+                        weight = float(weight)
+                        adj_df.at[i + 1, neighbor] = weight  # Store weight in the adjacency matrix
 
-    def add_node_list_mode(self):
-        num_nodes = simpledialog.askinteger("Input", "Enter number of nodes:", parent=self.master)
-        self.graph.clear()
-        self.pos.clear()
-
-        for i in range(num_nodes):
-            neighbors = simpledialog.askstring("Input", f"Enter neighbors of node {i} (format: node,weight;node,weight):",
-                                               parent=self.master)
-            if neighbors:
-                for entry in neighbors.split(';'):
-                    neighbor, weight = map(int, entry.split(','))
-                    self.graph.add_edge(i, neighbor, weight=weight)
-
-        self.pos = nx.spring_layout(self.graph)  # Recompute positions
-        self.draw_graph()
-
-    def add_edge(self):
-        start = simpledialog.askstring("Start Node", "Enter start node:", parent=self.master)
-        end = simpledialog.askstring("End Node", "Enter end node:", parent=self.master)
-        weight = simpledialog.askfloat("Weight", "Enter edge weight:", parent=self.master)
-        if start and end and weight is not None:
-            self.graph.add_edge(start, end, weight=weight)
+            # Create the graph from adjacency list
+            self.create_graph_from_adj_list(adj_df)
             self.draw_graph()
 
-    def show_prim_mst(self):
-        mst = nx.minimum_spanning_tree(self.graph, algorithm='prim')
-        self.draw_graph(mst)
+    def create_graph_from_adj_matrix(self, adj_matrix):
+        # Create graph from adjacency matrix
+        self.graph = nx.from_numpy_array(adj_matrix)
 
-    def show_kruskal_mst(self):
-        mst = nx.minimum_spanning_tree(self.graph, algorithm='kruskal')
-        self.draw_graph(mst)
+    def create_graph_from_adj_list(self, adj_df):
+        # Create graph from adjacency list
+        self.graph = nx.Graph(adj_df)
 
-    def draw_graph(self, mst=None):
+    def draw_graph(self, MST=None):
+        # Clear the existing figure and axis
         self.ax.clear()
-        if mst:
-            nx.draw(mst, pos=self.pos, with_labels=True, ax=self.ax, node_color='lightgreen',
-                    edge_color='green', width=2)
+
+        # Draw the graph using NetworkX
+        pos = nx.spring_layout(self.graph)  # Layout for the nodes
+        if MST is None:
+            print(self.graph.edges.items())
+            nx.draw(self.graph, pos, with_labels=True, ax=self.ax, node_color='lightblue', edge_color='gray', node_size=500, font_size=10)
+            org_edge_labels = nx.get_edge_attributes(self.graph, 'weight')
+            nx.draw_networkx_edge_labels(self.graph, pos, edge_labels=org_edge_labels, ax=self.ax)
         else:
-            nx.draw(self.graph, pos=self.pos, with_labels=True, ax=self.ax, node_color='lightblue',
-                    edge_color='blue')
-        edge_labels = nx.get_edge_attributes(self.graph, 'weight')
-        nx.draw_networkx_edge_labels(self.graph, pos=self.pos, edge_labels=edge_labels, ax=self.ax)
+            nx.draw(MST, pos, with_labels=True, ax=self.ax, node_color='lightgreen', edge_color='gray', node_size=500, font_size=10)
+            mst_edge_labels = nx.get_edge_attributes(MST, 'weight')
+            nx.draw_networkx_edge_labels(MST, pos, edge_labels=mst_edge_labels, ax=self.ax)
+
         self.canvas_widget.draw()
+
+    def find_prim(self):
+        prim = nx.minimum_spanning_tree(self.graph, algorithm='prim')
+        self.master.title('Prim')
+        self.draw_graph(prim)
+
+    def find_kruskal(self):
+        prim = nx.minimum_spanning_tree(self.graph, algorithm='kruskal')
+        self.master.title('Kruskal')
+        self.draw_graph(prim)
+
+    def org_graph(self):
+        self.master.title('Original Graph')
+        self.draw_graph()
 
 
 def main():
     root = tk.Tk()
-    app = GraphApp(root)
+
+    # Initialize the GraphVisualizer with the Tkinter root
+    app = GraphVisualizer(master=root)
+
+    # Run the Tkinter event loop
     root.mainloop()
 
 
